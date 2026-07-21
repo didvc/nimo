@@ -24,6 +24,7 @@ type
     modified*: bool
     cursor*: Pos
     wishCol*: int ## desired display column, kept across up/down moves
+    editTop*, editLeft*: int ## viewport scroll offset, remembered per tab
     undoStack, redoStack: seq[Edit]
     savedDepth: int ## undoStack.len at last save; -1 if unreachable
 

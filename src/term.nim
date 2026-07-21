@@ -17,11 +17,14 @@ type
     kNone, kChar, kCtrl, kEnter, kTab, kShiftTab, kBackspace, kDelete, kEsc,
     kUp, kDown, kLeft, kRight, kHome, kEnd, kPageUp, kPageDown,
     kCtrlUp, kCtrlDown, kCtrlLeft, kCtrlRight, kCtrlHome, kCtrlEnd,
-    kF5, kPaste, kResize
+    kF5, kPaste, kResize,
+    kCtrlPageUp, kCtrlPageDown,
+    kMouseDown, kScrollUp, kScrollDown
 
   Key* = object
     kind*: KeyKind
     ch*: string ## UTF-8 char (kChar), ctrl letter "a".."z" (kCtrl), text (kPaste)
+    mx*, my*: int ## 1-based column/row for mouse events
 
 var
   origTios: Termios
@@ -49,13 +52,13 @@ proc enterRaw*() =
   t.c_cc[VTIME] = 0.char
   discard tcSetAttr(0, TCSAFLUSH, addr t)
   rawOn = true
-  # alt screen on, bracketed paste on, clear
-  stdout.write "\e[?1049h\e[?2004h\e[2J\e[H"
+  # alt screen on, bracketed paste on, SGR mouse tracking on, clear
+  stdout.write "\e[?1049h\e[?2004h\e[?1000h\e[?1006h\e[2J\e[H"
   stdout.flushFile
 
 proc exitRaw*() =
   if rawOn:
-    stdout.write "\e[?2004l\e[?1049l\e[?25h\e[0m"
+    stdout.write "\e[?1000l\e[?1006l\e[?2004l\e[?1049l\e[?25h\e[0m"
     stdout.flushFile
     discard tcSetAttr(0, TCSAFLUSH, addr origTios)
     rawOn = false
@@ -104,13 +107,43 @@ proc withCtrl(plain, ctrl: KeyKind, params: string): Key =
   else:
     Key(kind: plain)
 
+proc readMouse(): Key =
+  ## Decodes an SGR mouse report: ESC [ < Cb ; Cx ; Cy (M|m)
+  var params = ""
+  var final = '\0'
+  while true:
+    if not pendingInput(50): return Key(kind: kNone)
+    let b = readByte()
+    if b < 0: return Key(kind: kNone)
+    let c = char(b)
+    if c in {'0'..'9', ';'}: params.add c
+    else: (final = c; break)
+  let parts = params.split(';')
+  if parts.len != 3: return Key(kind: kNone)
+  var cb, mx, my: int
+  try:
+    cb = parseInt(parts[0]); mx = parseInt(parts[1]); my = parseInt(parts[2])
+  except ValueError:
+    return Key(kind: kNone)
+  if (cb and 64) != 0: # scroll wheel
+    return if (cb and 1) != 0: Key(kind: kScrollDown, mx: mx, my: my)
+           else: Key(kind: kScrollUp, mx: mx, my: my)
+  if final == 'm': return Key(kind: kNone)   # button release
+  if (cb and 32) != 0: return Key(kind: kNone) # drag/motion
+  if (cb and 3) == 0: return Key(kind: kMouseDown, mx: mx, my: my) # left press
+  Key(kind: kNone)
+
 proc readCsi(): Key =
   var params = ""
+  var first = true
   while true:
     if not pendingInput(50): return Key(kind: kEsc)
     let b = readByte()
     if b < 0: return Key(kind: kEsc)
     let c = char(b)
+    if first and c == '<':
+      return readMouse()
+    first = false
     if c in {'0'..'9', ';'}:
       params.add c
       continue
@@ -128,8 +161,8 @@ proc readCsi(): Key =
       of "1", "7": return withCtrl(kHome, kCtrlHome, params)
       of "3": return Key(kind: kDelete)
       of "4", "8": return withCtrl(kEnd, kCtrlEnd, params)
-      of "5": return Key(kind: kPageUp)
-      of "6": return Key(kind: kPageDown)
+      of "5": return withCtrl(kPageUp, kCtrlPageUp, params)
+      of "6": return withCtrl(kPageDown, kCtrlPageDown, params)
       of "15": return Key(kind: kF5)
       of "200": return readPaste()
       else: return Key(kind: kNone)

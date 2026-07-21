@@ -1,11 +1,11 @@
 # Compiled binary
 /ternimal
 
-# Nim build cache
+# Nim build artifacts
 nimcache/
 *.o
+*.exe
 
 # Editor/OS cruft
 *.swp
-*~
 .DS_Store
