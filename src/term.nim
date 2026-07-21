@@ -7,10 +7,13 @@ import std/[termios, posix, strutils]
 
 when defined(linux):
   const SIGWINCH = cint(28)
+  const SIGTSTP = cint(20)
 elif defined(macosx) or defined(bsd):
   const SIGWINCH = cint(28)
+  const SIGTSTP = cint(18)
 else:
   const SIGWINCH = cint(28)
+  const SIGTSTP = cint(20)
 
 type
   KeyKind* = enum
@@ -62,6 +65,13 @@ proc exitRaw*() =
     stdout.flushFile
     discard tcSetAttr(0, TCSAFLUSH, addr origTios)
     rawOn = false
+
+proc suspend*() =
+  ## Ctrl+Z: hand control back to the shell via job control, then resume in
+  ## raw mode once the process is continued (e.g. with `fg`).
+  exitRaw()
+  discard kill(getpid(), SIGTSTP)
+  enterRaw()
 
 proc readByte(): int =
   ## -1 EOF/error, -2 interrupted by signal (e.g. resize)

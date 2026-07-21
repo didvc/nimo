@@ -41,7 +41,7 @@ def check(name, cond):
 out, rc = run(["\x11"])  # Ctrl-Q
 check("starts and quits on ^Q", rc == 0)
 check("renders alt screen", "\x1b[?1049h" in out)
-check("shows hint bar", "^S Save" in out and "^Q Quit" in out)
+check("shows hint bar", "^S Save" in out and "^X Quit" in out)
 check("lists tree files (src)", "src" in out)
 
 # 2. Type text into a new file, save it, verify contents on disk.
@@ -61,12 +61,18 @@ finally:
     os.chdir(cwd)
     shutil.rmtree(tmp, ignore_errors=True)
 
-# 3. Undo removes inserted text (buffer goes back to empty -> no save needed).
-out, rc = run(["abc", "\x1a", "\x1a", "\x1a", "\x11"])  # 3x Ctrl-Z then quit
-check("undo lets us quit without unsaved prompt (rc 0)", rc == 0)
+# 3. Undo (Ctrl-U) removes inserted text (buffer back to empty -> no save prompt).
+#    NOTE: never send Ctrl-Z (\x1a) here -- it now suspends the process (SIGTSTP)
+#    and would hang the test harness.
+out, rc = run(["abc", "\x15", "\x15", "\x15", "\x18"])  # 3x Ctrl-U then Ctrl-X quit
+check("Ctrl-U undo lets us quit without unsaved prompt (rc 0)", rc == 0)
+
+# 3b. Ctrl-X quits (nano-style) on a clean buffer.
+out, rc = run(["\x18"])
+check("Ctrl-X quits", rc == 0)
 
 # 4. Search prompt appears on Ctrl-F.
-out, rc = run(["\x06", "\x1b", "\x11"])  # Ctrl-F, Esc, then Ctrl-Q on clean buffer
+out, rc = run(["\x06", "\x1b", "\x18"])  # Ctrl-F, Esc, then Ctrl-X on clean buffer
 check("Ctrl-F opens Find prompt", "Find:" in out)
 check("Esc + quit works after Find", rc == 0)
 
@@ -102,6 +108,24 @@ try:
     # 7. Scroll wheel over the editor doesn't crash and still quits.
     out, rc = run([wheel(False, 40, 5), wheel(True, 40, 5), "\x11"])
     check("scroll wheel handled", rc == 0)
+finally:
+    os.chdir(cwd)
+    shutil.rmtree(tmp, ignore_errors=True)
+
+# 8. Many tabs overflow the bar and become horizontally scrollable (chevrons).
+tmp = tempfile.mkdtemp()
+os.chdir(tmp)
+try:
+    for n in range(12):
+        with open(f"file{n:02d}.txt", "w") as f: f.write(f"content {n}\n")
+    # Open all 12 by clicking tree rows 2..13, then wheel-scroll the tab bar.
+    keys = [click(3, 2 + n) for n in range(12)]
+    keys += [wheel(True, 50, 1), wheel(False, 50, 1)]  # scroll tabs at row 1
+    keys += ["\x18"]                                   # Ctrl-X quit (all clean)
+    out, rc = run(keys, cols=80)
+    check("opened 13 tabs (1 empty + 12 files)", "[13/13]" in out)
+    check("overflowing tabs show a scroll chevron", "›" in out or "‹" in out)
+    check("tab-overflow session quits cleanly", rc == 0)
 finally:
     os.chdir(cwd)
     shutil.rmtree(tmp, ignore_errors=True)

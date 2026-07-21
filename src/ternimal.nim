@@ -36,6 +36,7 @@ type
     lastSearch: string
     running: bool
     pendingClose: int        ## tab awaiting close confirmation
+    tabScroll: int           ## index of the leftmost visible tab
     tabSpans: seq[TabSpan]    ## hit-test regions, recomputed each render
 
 const
@@ -72,6 +73,25 @@ proc updateWinsize(e: Editor) =
 proc bufName(b: TextBuffer): string =
   if b.path.len > 0: b.path.lastPathPart else: "[No Name]"
 
+const TabNameMax = 24
+
+proc tabLabel(b: TextBuffer): string
+proc tabWidth(e: Editor, i: int): int
+
+proc ensureTabVisible(e: Editor) =
+  ## Scrolls the tab strip so the active tab is on screen. Called only when the
+  ## active tab changes, so the user's own horizontal scrolling is preserved.
+  e.tabScroll = clamp(e.tabScroll, 0, e.buffers.high)
+  if e.current < e.tabScroll:
+    e.tabScroll = e.current
+    return
+  let barW = e.editorWidth
+  while e.tabScroll < e.current:
+    var used = (if e.tabScroll > 0: 1 else: 0) + 1 # left + right chevron reserve
+    for i in e.tabScroll .. e.current: used += e.tabWidth(i)
+    if used <= barW: break
+    inc e.tabScroll
+
 # ---- rendering --------------------------------------------------------------
 
 proc ellipsize(s: string, w: int): string =
@@ -85,6 +105,9 @@ proc ellipsize(s: string, w: int): string =
     result.add r
     inc used
   result.add "…"
+
+proc tabLabel(b: TextBuffer): string = ellipsize(bufName(b), TabNameMax)
+proc tabWidth(e: Editor, i: int): int = tabLabel(e.buffers[i]).runeLen + 4 # " name × "
 
 const
   cReset = "\e[0m"
@@ -116,26 +139,44 @@ proc drawTopBar(e: Editor, sb: var string) =
     let head = ellipsize(" " & root.toUpperAscii, e.sidebarW)
     sb.add "\e[1;1H" & cHeader & padTo(head, head.runeLen, e.sidebarW) & cReset
     sb.add "\e[1;" & $(e.sidebarW + 1) & "H" & cSideBar & "│" & cReset
-  # tab bar (over the editor pane)
+  # tab bar (over the editor pane), horizontally scrollable when it overflows
   let x0 = e.editorX0
-  let limit = x0 + e.editorWidth # 1-based exclusive right edge
-  var col = x0 + 1               # next tab's starting column (1-based)
-  sb.add "\e[1;" & $col & "H"
-  for i, b in e.buffers:
-    let shown = ellipsize(bufName(b), 24)
-    let nameW = shown.runeLen
-    let w = nameW + 4 # " name × "
-    if col + w - 1 >= limit and i != e.current and col > x0 + 1:
-      sb.add cTabBar & "…" & cReset
-      inc col
-      break
+  let barW = e.editorWidth
+  let lastCol = x0 + barW            # rightmost editor-pane column (1-based)
+  var total = 0
+  for i in 0 ..< e.buffers.len: total += e.tabWidth(i)
+  let scrolling = total > barW
+  if not scrolling: e.tabScroll = 0
+  e.tabScroll = clamp(e.tabScroll, 0, e.buffers.high)
+  let leftChev = e.tabScroll > 0
+  var col = x0 + 1
+  if leftChev:
+    sb.add "\e[1;" & $col & "H" & cTabBar & "‹" & cReset
+    e.tabSpans.add (idx: -1, x0: col, x1: col, markerX: -1) # scroll-left hit
+    inc col
+  else:
+    sb.add "\e[1;" & $col & "H"
+  let drawMax = if scrolling: lastCol - 1 else: lastCol # reserve › when scrolling
+  var lastDrawn = e.tabScroll - 1
+  var i = e.tabScroll
+  while i < e.buffers.len:
+    let w = e.tabWidth(i)
+    if col + w - 1 > drawMax: break
+    let label = tabLabel(e.buffers[i])
     let style = if i == e.current: cTabActive else: cTabInactive
-    let marker = if b.modified: cModified & "●" else: cTabDim & "×"
-    sb.add style & " " & shown & " " & marker & style & " " & cReset
-    e.tabSpans.add (idx: i, x0: col, x1: col + w - 1, markerX: col + nameW + 2)
+    let marker = if e.buffers[i].modified: cModified & "●" else: cTabDim & "×"
+    sb.add style & " " & label & " " & marker & style & " " & cReset
+    e.tabSpans.add (idx: i, x0: col, x1: col + w - 1, markerX: col + label.runeLen + 2)
     col += w
-  if col < limit:
-    sb.add cTabBar & " ".repeat(limit - col) & cReset
+    lastDrawn = i
+    inc i
+  let rightChev = lastDrawn < e.buffers.high
+  let fillTo = if rightChev: lastCol - 1 else: lastCol
+  if col <= fillTo:
+    sb.add cTabBar & " ".repeat(fillTo - col + 1) & cReset
+  if rightChev:
+    sb.add "\e[1;" & $lastCol & "H" & cTabBar & "›" & cReset
+    e.tabSpans.add (idx: -2, x0: lastCol, x1: lastCol, markerX: -1) # scroll-right hit
 
 proc drawTree(e: Editor, sb: var string) =
   let h = e.editorHeight
@@ -211,9 +252,9 @@ proc drawHint(e: Editor, sb: var string) =
     if e.mode == mPrompt:
       e.promptLabel & e.promptInput & "▏"
     elif e.focus == foTree:
-      "click/Enter Open  n New  r Refresh  ^B Tree  ^Q Quit"
+      "click/Enter Open  n New  r Refresh  ^B Tree  ^X Quit"
     else:
-      "^S Save  ^F Find  ^G GoTo  ^W Close Tab  ^Z Undo  ^B Tree  ^Q Quit"
+      "^S Save  ^F Find  ^U Undo  ^R Redo  ^W Close  ^B Tree  ^Z Suspend  ^X Quit"
   sb.add ellipsize(hint, e.cols) & cReset
 
 proc scrollToCursor(e: Editor) =
@@ -280,6 +321,7 @@ proc openPath(e: Editor, path: string) =
     if b.path.len > 0 and normPath(b.path) == full:
       e.current = i
       e.focus = foEditor
+      e.ensureTabVisible()
       e.setStatus("Switched to " & full.lastPathPart)
       return
   try:
@@ -288,6 +330,7 @@ proc openPath(e: Editor, path: string) =
     e.buffers.add nb
     e.current = e.buffers.high
     e.focus = foEditor
+    e.ensureTabVisible()
     e.tree.revealPath(full)
     e.setStatus("Opened " & path.lastPathPart)
   except IOError, OSError:
@@ -300,6 +343,7 @@ proc forceClose(e: Editor, i: int) =
     e.buffers.add newTextBuffer()
   if e.current >= i and e.current > 0: dec e.current
   e.current = clamp(e.current, 0, e.buffers.high)
+  e.ensureTabVisible()
   e.setStatus("Closed tab")
 
 proc closeTabAt(e: Editor, i: int) =
@@ -315,11 +359,13 @@ proc nextTab(e: Editor) =
   if e.buffers.len > 1:
     e.current = (e.current + 1) mod e.buffers.len
     e.focus = foEditor
+    e.ensureTabVisible()
 
 proc prevTab(e: Editor) =
   if e.buffers.len > 1:
     e.current = (e.current - 1 + e.buffers.len) mod e.buffers.len
     e.focus = foEditor
+    e.ensureTabVisible()
 
 proc doSave(e: Editor, path: string): bool =
   try:
@@ -506,11 +552,18 @@ proc treeClick(e: Editor, my: int) =
   if sel.isDir: e.tree.toggle()
   else: e.openPath(sel.path)
 
+proc scrollTabs(e: Editor, delta: int) =
+  e.tabScroll = clamp(e.tabScroll + delta, 0, e.buffers.high)
+
 proc tabBarClick(e: Editor, mx: int) =
   for sp in e.tabSpans:
     if mx >= sp.x0 and mx <= sp.x1:
-      if mx == sp.markerX: e.closeTabAt(sp.idx)
-      else: (e.current = sp.idx; e.focus = foEditor)
+      case sp.idx
+      of -1: e.scrollTabs(-1)      # ‹ chevron
+      of -2: e.scrollTabs(1)       # › chevron
+      else:
+        if mx == sp.markerX: e.closeTabAt(sp.idx)
+        else: (e.current = sp.idx; e.focus = foEditor)
       return
 
 proc overTree(e: Editor, mx, my: int): bool =
@@ -524,10 +577,12 @@ proc handleMouse(e: Editor, k: term.Key) =
       if e.overTree(k.mx, k.my): e.treeClick(k.my)
       elif k.mx > e.editorX0: e.editorClick(k.mx, k.my)
   of kScrollUp:
-    if e.overTree(k.mx, k.my): e.tree.sel = max(0, e.tree.sel - 3)
+    if k.my <= TopBarRows: e.scrollTabs(-1)
+    elif e.overTree(k.mx, k.my): e.tree.sel = max(0, e.tree.sel - 3)
     else: e.moveVert(-3)
   of kScrollDown:
-    if e.overTree(k.mx, k.my): e.tree.sel = min(e.tree.flat.len - 1, e.tree.sel + 3)
+    if k.my <= TopBarRows: e.scrollTabs(1)
+    elif e.overTree(k.mx, k.my): e.tree.sel = min(e.tree.flat.len - 1, e.tree.sel + 3)
     else: e.moveVert(3)
   else: discard
 
@@ -535,7 +590,11 @@ proc handleMouse(e: Editor, k: term.Key) =
 
 proc handleCtrl(e: Editor, letter: string) =
   case letter
-  of "q": e.requestQuit()
+  of "x", "q": e.requestQuit()                       # ^X quit (nano), ^Q alias
+  of "z":                                            # suspend to shell
+    suspend()
+    e.updateWinsize()
+    e.setStatus("Resumed")
   of "s": e.handleSave()
   of "w": e.closeTabAt(e.current)
   of "b":
@@ -548,8 +607,8 @@ proc handleCtrl(e: Editor, letter: string) =
     e.setStatus("Browse files — click or Enter to open")
   of "f": e.startPrompt(pkSearch, "Find: ", e.lastSearch)
   of "g": e.startPrompt(pkGoto, "Go to line: ")
-  of "z": (if not e.buf.undo(): e.setStatus("Nothing to undo"))
-  of "y": (if not e.buf.redo(): e.setStatus("Nothing to redo"))
+  of "u": (if not e.buf.undo(): e.setStatus("Nothing to undo"))
+  of "r", "y": (if not e.buf.redo(): e.setStatus("Nothing to redo"))
   of "n":
     if e.lastSearch.len > 0:
       if not e.buf.findNext(e.lastSearch):
