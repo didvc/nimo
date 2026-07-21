@@ -1,4 +1,4 @@
-## ternimal — a nano-inspired terminal text editor in Nim.
+## nimo (Nim Terminal Text Editor) — a nano-inspired terminal text editor.
 ##
 ## Layout: a file-tree sidebar on the left, a tab bar across the top of the
 ## editor pane, the editor below it, then a status line and a keybinding hint
@@ -664,7 +664,7 @@ proc newEditor(startPath: string): Editor =
     result.setStatus("New file: " & startPath)
   else:
     b = newTextBuffer()
-    result.setStatus("ternimal v" & Version & " — click a file or ^O to browse")
+    result.setStatus("nimo v" & Version & " — click a file or ^O to browse")
   result.buffers = @[b]
 
 proc main() =
@@ -672,16 +672,16 @@ proc main() =
   for i in 1 .. paramCount():
     let a = paramStr(i)
     if a == "--help" or a == "-h":
-      echo "ternimal v", Version, " — a friendly terminal text editor"
-      echo "Usage: ternimal [file]"
+      echo "nimo v", Version, " (Nim Terminal Text Editor) — a friendly editor"
+      echo "Usage: nimo [file]"
       return
     elif a == "--version":
-      echo "ternimal v", Version
+      echo "nimo v", Version
       return
     elif not a.startsWith("-"):
       startPath = a
   if isatty(0) == 0:
-    stderr.writeLine "ternimal: not a terminal"
+    stderr.writeLine "nimo: not a terminal"
     quit(1)
   installWinchHandler()
   enterRaw()

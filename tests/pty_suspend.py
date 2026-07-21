@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Verify Ctrl+Z suspends ternimal to the shell and it resumes on SIGCONT."""
+"""Verify Ctrl+Z suspends nimo to the shell and it resumes on SIGCONT."""
 import os, pty, select, subprocess, sys, time, signal, struct, fcntl, termios
 
-BIN = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ternimal"))
+BIN = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "nimo"))
 
 def proc_state(pid):
     """Single-char process state from /proc/<pid>/stat (T = stopped)."""

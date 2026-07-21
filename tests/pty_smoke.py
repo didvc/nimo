@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
-"""Drive the real ternimal TUI through a pty and assert on behavior."""
+"""Drive the real nimo TUI through a pty and assert on behavior."""
 import os, pty, select, subprocess, sys, time, tempfile, shutil
 
-BIN = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "ternimal"))
+BIN = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "nimo"))
 
 def run(keystrokes, argv=None, cols=100, rows=30):
     argv = argv or []
@@ -50,13 +50,13 @@ target = os.path.join(tmp, "hello.txt")
 cwd = os.getcwd()
 os.chdir(tmp)
 try:
-    out, rc = run(["Hello, ternimal!", "\r", "second line", "\x13", "\x11"],
+    out, rc = run(["Hello, nimo!", "\r", "second line", "\x13", "\x11"],
                   argv=[target])
     check("typed-file quits cleanly", rc == 0)
     with open(target) as f:
         content = f.read()
     check("file saved with typed content",
-          content == "Hello, ternimal!\nsecond line\n")
+          content == "Hello, nimo!\nsecond line\n")
 finally:
     os.chdir(cwd)
     shutil.rmtree(tmp, ignore_errors=True)
