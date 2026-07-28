@@ -17,8 +17,6 @@ jobs:
       matrix:
         include:
           - { os: ubuntu-latest, target: linux-amd64 }
-          - { os: macos-13, target: macos-amd64 }
-          - { os: macos-latest, target: macos-arm64 }
           - { os: windows-latest, target: windows-amd64, ext: ".exe" }
 
     steps:
