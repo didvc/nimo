@@ -22,6 +22,29 @@ for clicking files, switching tabs and placing the cursor.
 - `Ctrl+Z` suspends back to the shell and resumes cleanly with `fg`.
 - No external libraries — the Nim standard library is the only requirement.
 
+## Platforms
+
+Linux, macOS/BSD and Windows share one codebase; only `term.nim` differs.
+
+| Platform | Status |
+| --- | --- |
+| Linux | Supported (tested on 2.2.10) |
+| macOS / BSD | Supported (same POSIX backend) |
+| Windows 10 1703+ | Supported (tested on 10.0.19045 with Nim 2.2.4 + mingw64) |
+
+On Windows the console is switched into VT mode
+(`ENABLE_VIRTUAL_TERMINAL_INPUT` / `ENABLE_VIRTUAL_TERMINAL_PROCESSING`), so it
+speaks the same escape sequences as a POSIX terminal and the whole decoder is
+shared. Two differences are unavoidable there:
+
+- `Ctrl+Z` suspend needs job control, which Windows has no equivalent for. The
+  key reports that it is unavailable and the hint bar advertises `^G Goto`
+  instead.
+- Window resize is polled rather than delivered by `SIGWINCH`.
+
+Windows Terminal is recommended over the legacy console host, particularly for
+mouse support. Files are written with `\n` line endings on every platform.
+
 ## Build
 
 Requires Nim >= 2.0 (tested on 2.2.10). No dependencies to fetch.
@@ -53,7 +76,7 @@ nimble run            # build + open the current directory
 | `Ctrl+X` | Quit (`Ctrl+Q` also works; asks to confirm if anything is unsaved) |
 | `Ctrl+B` | Toggle the file-tree sidebar |
 | `Ctrl+O` | Move focus to the file tree to browse and open |
-| `Ctrl+Z` | Suspend to the shell (resume with `fg`) |
+| `Ctrl+Z` | Suspend to the shell (resume with `fg`; POSIX only) |
 | `Shift+Tab` | Switch focus between the editor and the tree |
 
 ### Editor pane
@@ -92,8 +115,10 @@ nimble run            # build + open the current directory
 ## Design notes
 
 The code splits into four modules. `term.nim` handles raw mode, key and mouse
-decoding, bracketed paste, window-resize (SIGWINCH) and shell suspend
-(SIGTSTP). `textbuffer.nim` is the editing core: UTF-8 aware, with
+decoding, bracketed paste, window resize and shell suspend; it holds the two
+platform backends (termios/signals on POSIX, the console API on Windows) behind
+one interface, with the escape-sequence decoder shared between them.
+`textbuffer.nim` is the editing core: UTF-8 aware, with
 tab-expansion display math, an undo/redo journal and smart-case search.
 `filetree.nim` is the lazy, cached sidebar model. `nimo.nim` wires them
 together with the rendering and input loop.

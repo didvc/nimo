@@ -6,7 +6,7 @@
 ## place the cursor; the wheel scrolls whichever pane is under the pointer.
 ## Nim standard library only.
 
-import std/[os, posix, termios, strutils, unicode, exitprocs]
+import std/[os, strutils, unicode, exitprocs]
 import term, textbuffer, filetree
 
 type
@@ -60,13 +60,9 @@ proc editorX0(e: Editor): int =
   if e.showTree: e.sidebarW + 1 else: 0
 
 proc updateWinsize(e: Editor) =
-  var ws: IOctl_WinSize
-  if ioctl(1, TIOCGWINSZ, addr ws) == 0 and ws.ws_row > 0:
-    e.rows = int(ws.ws_row)
-    e.cols = int(ws.ws_col)
-  else:
-    e.rows = 24
-    e.cols = 80
+  let (w, h) = terminalSize()
+  e.rows = h
+  e.cols = w
   e.sidebarW = min(SidebarDefault, e.cols div 3)
   if e.cols < 40: e.showTree = false
 
@@ -254,7 +250,10 @@ proc drawHint(e: Editor, sb: var string) =
     elif e.focus == foTree:
       "click/Enter Open  n New  r Refresh  ^B Tree  ^X Quit"
     else:
-      "^S Save  ^F Find  ^U Undo  ^R Redo  ^W Close  ^B Tree  ^Z Suspend  ^X Quit"
+      when suspendSupported:
+        "^S Save  ^F Find  ^U Undo  ^R Redo  ^W Close  ^B Tree  ^Z Suspend  ^X Quit"
+      else: # no job control: don't advertise a key that cannot work
+        "^S Save  ^F Find  ^U Undo  ^R Redo  ^W Close  ^B Tree  ^G Goto  ^X Quit"
   sb.add ellipsize(hint, e.cols) & cReset
 
 proc scrollToCursor(e: Editor) =
@@ -592,9 +591,12 @@ proc handleCtrl(e: Editor, letter: string) =
   case letter
   of "x", "q": e.requestQuit()                       # ^X quit (nano), ^Q alias
   of "z":                                            # suspend to shell
-    suspend()
-    e.updateWinsize()
-    e.setStatus("Resumed")
+    when suspendSupported:
+      suspend()
+      e.updateWinsize()
+      e.setStatus("Resumed")
+    else:
+      e.setStatus("Suspend is not available on this platform", err = true)
   of "s": e.handleSave()
   of "w": e.closeTabAt(e.current)
   of "b":
@@ -680,7 +682,7 @@ proc main() =
       return
     elif not a.startsWith("-"):
       startPath = a
-  if isatty(0) == 0:
+  if not isTerminal():
     stderr.writeLine "nimo: not a terminal"
     quit(1)
   installWinchHandler()
