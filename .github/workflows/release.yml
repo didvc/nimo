@@ -40,14 +40,17 @@ jobs:
       - name: Unit tests
         run: nim c -r --hints:off tests/test_buffer.nim
 
-      # The pty harness needs a POSIX pseudo-terminal and job control, so it
-      # only runs on Linux. Windows is covered by the unit tests plus manual
-      # checks against a real console; see CHANGELOG.md.
+      # The pty harness needs a POSIX pseudo-terminal, so it only runs on Linux.
+      # Windows is covered by the unit tests plus manual checks against a real
+      # console; see CHANGELOG.md.
+      #
+      # pty_suspend.py is deliberately excluded: POSIX discards SIGTSTP sent to
+      # an orphaned process group, which is what the test's child lands in on a
+      # runner with no interactive session, so Ctrl+Z never stops the process
+      # and the check fails for reasons unrelated to the editor. Run it locally.
       - name: TUI tests
         if: runner.os == 'Linux'
-        run: |
-          python3 tests/pty_smoke.py
-          python3 tests/pty_suspend.py
+        run: python3 tests/pty_smoke.py
 
       - name: Package
         if: runner.os != 'Windows'

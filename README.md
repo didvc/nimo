@@ -144,6 +144,10 @@ python3 tests/pty_smoke.py       # drives the real TUI through a pty
 python3 tests/pty_suspend.py     # checks Ctrl+Z suspend / resume
 ```
 
+The first two run in CI. `pty_suspend.py` is local-only, because POSIX discards
+`SIGTSTP` sent to an orphaned process group, so Ctrl+Z cannot stop the process
+on a CI runner with no interactive session.
+
 ## Screenshot
 
 The image above is generated from this repository with `scripts/screenshot.sh`,
