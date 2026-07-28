@@ -1,0 +1,110 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: ${{ matrix.target }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: linux-amd64 }
+          - { os: macos-13, target: macos-amd64 }
+          - { os: macos-latest, target: macos-arm64 }
+          - { os: windows-latest, target: windows-amd64, ext: ".exe" }
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: jiro4989/setup-nim-action@v2
+        with:
+          nim-version: "2.2.x"
+          repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve version
+        id: v
+        shell: bash
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Build
+        run: nim c -d:release --opt:speed --out:nimo${{ matrix.ext }} src/nimo.nim
+
+      - name: Unit tests
+        run: nim c -r --hints:off tests/test_buffer.nim
+
+      # The pty harness needs a POSIX pseudo-terminal and job control, so it
+      # only runs on Linux. Windows is covered by the unit tests plus manual
+      # checks against a real console; see CHANGELOG.md.
+      - name: TUI tests
+        if: runner.os == 'Linux'
+        run: |
+          python3 tests/pty_smoke.py
+          python3 tests/pty_suspend.py
+
+      - name: Package
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          name="nimo-${{ steps.v.outputs.version }}-${{ matrix.target }}"
+          mkdir -p "dist/$name"
+          cp nimo README.md CHANGELOG.md LICENSE "dist/$name/"
+          tar -C dist -czf "dist/$name.tar.gz" "$name"
+
+      - name: Package (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $name = "nimo-${{ steps.v.outputs.version }}-${{ matrix.target }}"
+          New-Item -ItemType Directory -Force -Path "dist/$name" | Out-Null
+          Copy-Item nimo.exe, README.md, CHANGELOG.md, LICENSE "dist/$name/"
+          Compress-Archive -Path "dist/$name" -DestinationPath "dist/$name.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.target }}
+          path: |
+            dist/*.tar.gz
+            dist/*.zip
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Checksums
+        working-directory: dist
+        run: sha256sum * > SHA256SUMS
+
+      - name: Release notes from CHANGELOG
+        run: |
+          awk -v v="${GITHUB_REF_NAME#v}" '
+            $0 ~ "^## \\[" v "\\]" { found = 1; next }
+            found && /^## \[/       { exit }
+            found                   { print }
+          ' CHANGELOG.md > notes.md
+          if [ ! -s notes.md ]; then
+            echo "No CHANGELOG entry for ${GITHUB_REF_NAME}" >&2
+            exit 1
+          fi
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          body_path: notes.md
+          files: dist/*
+          fail_on_unmatched_files: true

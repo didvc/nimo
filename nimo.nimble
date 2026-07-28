@@ -1,6 +1,6 @@
 # Package
 
-version       = "0.1.0"
+version       = "0.2.0"
 author        = "nimo contributors"
 description   = "nimo — a nano-inspired terminal text editor with a file-tree sidebar"
 license       = "MIT"

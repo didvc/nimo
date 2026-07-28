@@ -42,7 +42,7 @@ type
 const
   SidebarDefault = 30
   TopBarRows = 1 ## the tab / sidebar-header row
-  Version = "0.1.0"
+  Version = "0.2.0"
 
 template buf(e: Editor): TextBuffer = e.buffers[e.current]
 
@@ -693,6 +693,10 @@ proc main() =
     while e.running:
       e.render()
       e.dispatch(readKey())
+      # Drain whatever else already arrived before painting again: a burst of
+      # input (paste, held key, wheel spin) costs one repaint, not one each.
+      while e.running and inputPending():
+        e.dispatch(readKey())
   finally:
     exitRaw()
 

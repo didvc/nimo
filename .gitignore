@@ -5,6 +5,10 @@
 nimcache/
 *.o
 *.exe
+/tests/test_buffer
+
+# Release packaging
+/dist/
 
 # Editor/OS cruft
 *.swp

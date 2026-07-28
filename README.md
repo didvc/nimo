@@ -41,6 +41,11 @@ shared. Two differences are unavoidable there:
   key reports that it is unavailable and the hint bar advertises `^G Goto`
   instead.
 - Window resize is polled rather than delivered by `SIGWINCH`.
+- Bracketed paste is unavailable: the legacy console never implemented it and
+  ConPTY strips the markers, so a paste arrives as ordinary keystrokes. Pasting
+  is still fast — the input loop drains a whole burst before repainting — but
+  each pasted character is its own undo step, so `Ctrl+U` after a paste undoes
+  one character at a time rather than the paste as a whole.
 
 Windows Terminal is recommended over the legacy console host, particularly for
 mouse support. Files are written with `\n` line endings on every platform.

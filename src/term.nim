@@ -297,6 +297,14 @@ else:
 
 # ---- shared escape-sequence decoder ----------------------------------------
 
+proc inputPending*(): bool =
+  ## True when a key is already buffered, so the caller can drain a burst and
+  ## repaint once instead of once per key. Windows has no bracketed paste
+  ## (conhost never implemented it and ConPTY strips the markers), so a paste
+  ## arrives as thousands of ordinary keystrokes and this is what keeps it from
+  ## costing thousands of full-screen repaints.
+  pendingInput(0)
+
 proc utf8SeqLen(b: int): int =
   if b < 0x80: 1
   elif b shr 5 == 0b110: 2
