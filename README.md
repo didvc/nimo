@@ -153,3 +153,15 @@ on a CI runner with no interactive session.
 The image above is generated from this repository with `scripts/screenshot.sh`,
 which drives nimo inside a tmux pane and renders the captured screen with
 [freeze](https://github.com/charmbracelet/freeze).
+
+<!-- BEGIN gh-mutual-linking -->
+
+---
+
+### Related projects
+
+- [**lpchart**](https://github.com/didvc/lpchart) — Chart InfluxDB line protocol in your terminal. Browse measurements, fields and tag sets interactively without knowing what is in the file first.
+- [**totp**](https://github.com/tui-apps/totp) — Terminal TOTP authenticator: live 2FA codes with countdown (RFC 6238, Go, Bubble Tea)
+- [**calc**](https://github.com/tui-apps/calc) — Live terminal calculator: evaluates arithmetic as you type, no Enter key (Go, Bubble Tea)
+- [**note-cli**](https://github.com/didvc/note-cli) — Markdown Indexing and Pcre Regular Expression Compatible Full Text Searching for Advanced Note Takers.
+<!-- END gh-mutual-linking -->
