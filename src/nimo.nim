@@ -207,20 +207,30 @@ proc drawTree(e: Editor, sb: var string) =
     sb.add "\e[" & $ty & ";" & $(e.sidebarW + 1) & "H" & cSideBar & "│" & cReset
 
 proc drawEditor(e: Editor, sb: var string) =
+  ## Each row is written full-width in one pass (padded with spaces) rather
+  ## than erased with \e[K and then redrawn. Erase-then-write is a two-phase
+  ## paint: on real terminals both phases land in the same compositor frame
+  ## so it's invisible, but the Windows console repaints synchronously as it
+  ## parses, so every scrolled row visibly blanks before its new text lands.
+  ## Padding to the full width removes the erase step entirely.
   let h = e.editorHeight
   let x0 = e.editorX0
+  let w = e.editorWidth
   let gutterW = max(3, ($e.buf.lines.len).len) + 1
-  let textW = e.editorWidth - gutterW
+  let textW = w - gutterW
   for row in 0 ..< h:
     let ty = row + 1 + TopBarRows
-    sb.add "\e[" & $ty & ";" & $(x0 + 1) & "H\e[K"
+    sb.add "\e[" & $ty & ";" & $(x0 + 1) & "H"
     let li = e.buf.editTop + row
     if li >= e.buf.lines.len:
       sb.add cLineNo & "~" & cReset
+      if w > 1: sb.add " ".repeat(w - 1)
     else:
       let num = align($(li + 1), gutterW - 1)
-      sb.add cLineNo & num & " " & cReset
-      sb.add expandSlice(e.buf.lines[li], e.buf.editLeft, textW)
+      let text = expandSlice(e.buf.lines[li], e.buf.editLeft, textW)
+      sb.add cLineNo & num & " " & cReset & text
+      let visLen = gutterW + text.runeLen
+      if visLen < w: sb.add " ".repeat(w - visLen)
 
 proc drawStatus(e: Editor, sb: var string) =
   sb.add "\e[" & $(e.rows - 1) & ";1H\e[K"
@@ -283,12 +293,19 @@ proc placeCursor(e: Editor, sb: var string) =
 proc render(e: Editor) =
   e.scrollToCursor()
   var sb = "\e[?25l\e[H"
+  when defined(windows):
+    # Synchronized output (mode 2026): batches the repaint on terminals that
+    # honor it (Windows Terminal 1.16+) instead of painting each escape
+    # sequence as it's parsed. Ignored harmlessly on hosts that don't.
+    sb = "\e[?2026h" & sb
   e.drawTopBar(sb)
   if e.showTree: e.drawTree(sb)
   e.drawEditor(sb)
   e.drawStatus(sb)
   e.drawHint(sb)
   e.placeCursor(sb)
+  when defined(windows):
+    sb.add "\e[?2026l"
   stdout.write sb
   stdout.flushFile
 
