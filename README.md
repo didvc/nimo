@@ -1,3 +1,5 @@
+English · [日本語](README-ja.md) · [繁體中文](README-zh-TW.md) · [简体中文](README-zh.md) · [Deutsch](README-de.md) · [Français](README-fr.md)
+
 # nimo
 
 *Nim Terminal Text Editor.*
@@ -20,7 +22,7 @@ for clicking files, switching tabs and placing the cursor.
 - UTF-8-aware editing with undo/redo and a save-point indicator.
 - Smart-case search, go-to-line, and word-wise cursor movement.
 - `Ctrl+Z` suspends back to the shell and resumes cleanly with `fg`.
-- No external libraries — the Nim standard library is the only requirement.
+- No external libraries; the Nim standard library is the only requirement.
 
 ## Platforms
 
@@ -43,7 +45,7 @@ shared. Two differences are unavoidable there:
 - Window resize is polled rather than delivered by `SIGWINCH`.
 - Bracketed paste is unavailable: the legacy console never implemented it and
   ConPTY strips the markers, so a paste arrives as ordinary keystrokes. Pasting
-  is still fast — the input loop drains a whole burst before repainting — but
+  is still fast (the input loop drains a whole burst before repainting), but
   each pasted character is its own undo step, so `Ctrl+U` after a paste undoes
   one character at a time rather than the paste as a whole.
 
@@ -160,8 +162,8 @@ which drives nimo inside a tmux pane and renders the captured screen with
 
 ### Related projects
 
-- [**lpchart**](https://github.com/didvc/lpchart) — Chart InfluxDB line protocol in your terminal. Browse measurements, fields and tag sets interactively without knowing what is in the file first.
-- [**totp**](https://github.com/tui-apps/totp) — Terminal TOTP authenticator: live 2FA codes with countdown (RFC 6238, Go, Bubble Tea)
-- [**calc**](https://github.com/tui-apps/calc) — Live terminal calculator: evaluates arithmetic as you type, no Enter key (Go, Bubble Tea)
-- [**note-cli**](https://github.com/didvc/note-cli) — Markdown Indexing and Pcre Regular Expression Compatible Full Text Searching for Advanced Note Takers.
+- [lpchart](https://github.com/didvc/lpchart): Chart InfluxDB line protocol in your terminal. Browse measurements, fields and tag sets interactively without knowing what is in the file first.
+- [totp](https://github.com/tui-apps/totp): Terminal TOTP authenticator: live 2FA codes with countdown (RFC 6238, Go, Bubble Tea)
+- [calc](https://github.com/tui-apps/calc): Live terminal calculator: evaluates arithmetic as you type, no Enter key (Go, Bubble Tea)
+- [note-cli](https://github.com/didvc/note-cli): Markdown Indexing and Pcre Regular Expression Compatible Full Text Searching for Advanced Note Takers.
 <!-- END gh-mutual-linking -->
